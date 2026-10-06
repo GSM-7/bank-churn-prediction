@@ -1,4 +1,5 @@
 import os, joblib, pandas as pd, numpy as np
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 import streamlit as st
 import matplotlib.pyplot as plt
 from train import add_features
@@ -7,9 +8,15 @@ st.set_page_config(page_title="Bank Churn Risk Scoring", page_icon="🏦", layou
 
 @st.cache_resource
 def load():
-    if not os.path.exists("models/best_model.joblib"):
+    try:
+        return joblib.load("models/best_model.joblib")
+    except Exception:
+        if not os.path.exists("data/Churn_Modelling.csv"):
+            st.error("Model file and dataset not found in the repo. Upload the 'models' folder "
+                     "or 'data/Churn_Modelling.csv' to GitHub, then reboot the app.")
+            st.stop()
         import train; train.main()
-    return joblib.load("models/best_model.joblib")
+        return joblib.load("models/best_model.joblib")
 
 art = load(); pipe = art["pipe"]
 metrics = pd.read_csv("models/metrics.csv")
