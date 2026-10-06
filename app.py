@@ -1,27 +1,41 @@
 import os, joblib, pandas as pd, numpy as np
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
+import glob
 import streamlit as st
 import matplotlib.pyplot as plt
 from train import add_features
 
 st.set_page_config(page_title="Bank Churn Risk Scoring", page_icon="🏦", layout="wide")
 
+def find(name):
+    hits = glob.glob(f"**/{name}", recursive=True)
+    return hits[0] if hits else None
+
 @st.cache_resource
 def load():
-    try:
+    err, mp = None, find("best_model.joblib")
+    if mp:
+        try:
+            return joblib.load(mp)
+        except Exception as e:
+            err = repr(e)
+    csv = find("Churn_Modelling.csv") or find("European_Bank.csv")
+    if csv:
+        import train
+        train.DATA = csv; train.OUT = "models"
+        train.main()
         return joblib.load("models/best_model.joblib")
-    except Exception:
-        if not os.path.exists("data/Churn_Modelling.csv"):
-            st.error("Model file and dataset not found in the repo. Upload the 'models' folder "
-                     "or 'data/Churn_Modelling.csv' to GitHub, then reboot the app.")
-            st.stop()
-        import train; train.main()
-        return joblib.load("models/best_model.joblib")
+    st.error("Could not load the model and no dataset was found to retrain.")
+    if err: st.code(f"Model load error: {err}")
+    st.write("Files the app can see in the repo:")
+    st.code("\n".join(sorted(os.path.join(r, f) for r, _, fs in os.walk(".") for f in fs
+                           if ".git" not in r and "__pycache__" not in r)))
+    st.stop()
 
 art = load(); pipe = art["pipe"]
-metrics = pd.read_csv("models/metrics.csv")
-imp = pd.read_csv("models/feature_importance.csv")
-scores = pd.read_csv("models/test_scores.csv")
+metrics = pd.read_csv(find("metrics.csv"))
+imp = pd.read_csv(find("feature_importance.csv"))
+scores = pd.read_csv(find("test_scores.csv"))
 
 def score(d):
     return float(pipe.predict_proba(add_features(pd.DataFrame([d])))[:, 1][0])
@@ -70,11 +84,11 @@ with t3:
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.barh(top.Feature, top.Importance); ax.set_xlabel("Drop in ROC-AUC when shuffled")
     st.pyplot(fig)
-    st.dataframe(imp, use_container_width=True)
-    if os.path.exists("figures/shap_summary.png"):
-        st.subheader("SHAP summary"); st.image("figures/shap_summary.png")
-    if os.path.exists("figures/partial_dependence.png"):
-        st.subheader("Partial dependence"); st.image("figures/partial_dependence.png")
+    st.dataframe(imp, width="stretch")
+    if find("shap_summary.png"):
+        st.subheader("SHAP summary"); st.image(find("shap_summary.png"))
+    if find("partial_dependence.png"):
+        st.subheader("Partial dependence"); st.image(find("partial_dependence.png"))
 
 with t4:
     st.write("Change engagement / product values and compare against the profile in the sidebar.")
@@ -97,4 +111,4 @@ with t4:
     st.pyplot(fig)
 
 with t5:
-    st.dataframe(metrics.style.format({k: "{:.3f}" for k in metrics.columns[1:]}), use_container_width=True)
+    st.dataframe(metrics.style.format({k: "{:.3f}" for k in metrics.columns[1:]}), width="stretch")
